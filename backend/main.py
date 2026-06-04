@@ -1,9 +1,12 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime
 import yfinance as yf
-from database import SessionLocal, init_db, Watchlist, Holding, Balance, Order, Alert, User
+from database import (
+    SessionLocal, init_db,
+    User, Watchlist, Holding, Balance, Order, Alert
+)
 from passlib.hash import bcrypt
 
 app = FastAPI()
@@ -17,6 +20,7 @@ app.add_middleware(
 
 init_db()
 
+# ─── DATABASE SESSION ─────────────────────────────────
 def get_db():
     db = SessionLocal()
     try:
@@ -24,6 +28,17 @@ def get_db():
     finally:
         db.close()
 
+# ─── GET CURRENT USER ─────────────────────────────────
+# Every route that needs user data calls this function.
+# It finds the user by email. If user not found, it
+# stops the request and returns a 404 error.
+def get_current_user(email: str, db: Session):
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+# ─── STOCK HELPERS ────────────────────────────────────
 def get_nse_ticker(symbol):
     return symbol.upper() + ".NS"
 
@@ -42,7 +57,7 @@ def fetch_stock_data(symbol):
             "price": price,
             "change": change,
         }
-    except Exception as e:
+    except Exception:
         return None
 
 def calculate_ai_signal(symbol):
@@ -107,18 +122,53 @@ def calculate_ai_signal(symbol):
             "rsi": round(rsi, 1),
             "score": score,
         }
-    except Exception as e:
+    except Exception:
         return {"signal": "HOLD", "confidence": 0, "reason": "Error calculating signal"}
 
+# ─── AUTH ROUTES ──────────────────────────────────────
 @app.get("/")
 def read_root():
     return {"message": "Trading Dashboard API"}
 
+@app.post("/auth/signup")
+def signup(name: str, email: str, password: str, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        return {"error": "Email already registered"}
+    hashed = bcrypt.hash(password)
+    user = User(name=name, email=email, password=hashed, phone="")
+    db.add(user)
+    db.flush()
+    db.add(Balance(amount=100000.0, user_id=user.id))
+    default_stocks = ["RELIANCE", "TCS", "INFY", "HDFCBANK"]
+    for symbol in default_stocks:
+        db.add(Watchlist(symbol=symbol, user_id=user.id))
+    db.commit()
+    return {
+        "message": "Account created successfully",
+        "name": user.name,
+        "email": user.email
+    }
+
+@app.post("/auth/login")
+def login(email: str, password: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return {"error": "Email not found"}
+    if not bcrypt.verify(password, user.password):
+        return {"error": "Wrong password"}
+    return {
+        "message": "Login successful",
+        "name": user.name,
+        "email": user.email,
+    }
+
+# ─── STOCK ROUTES ─────────────────────────────────────
 @app.get("/stocks")
-def get_all_stocks(db: Session = Depends(get_db)):
-    watchlist = db.query(Watchlist).all()
+def get_all_stocks(email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
     result = {}
-    for item in watchlist:
+    for item in user.watchlist:
         data = fetch_stock_data(item.symbol)
         if data:
             result[item.symbol] = data
@@ -141,40 +191,50 @@ def get_history(symbol: str):
                 "close": round(row["Close"], 2),
             })
         return result
-    except Exception as e:
+    except Exception:
         return []
 
 @app.get("/signal/{symbol}")
 def get_signal(symbol: str):
-    symbol = symbol.upper()
-    return calculate_ai_signal(symbol)
+    return calculate_ai_signal(symbol.upper())
 
+# ─── WATCHLIST ROUTES ─────────────────────────────────
 @app.post("/watchlist/add/{symbol}")
-def add_stock(symbol: str, db: Session = Depends(get_db)):
+def add_stock(symbol: str, email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
     symbol = symbol.upper()
-    existing = db.query(Watchlist).filter(Watchlist.symbol == symbol).first()
+    existing = db.query(Watchlist).filter(
+        Watchlist.symbol == symbol,
+        Watchlist.user_id == user.id
+    ).first()
     if existing:
         return {"message": f"{symbol} already in watchlist"}
-    db.add(Watchlist(symbol=symbol))
+    db.add(Watchlist(symbol=symbol, user_id=user.id))
     db.commit()
     return {"message": f"{symbol} added"}
 
 @app.delete("/watchlist/remove/{symbol}")
-def remove_stock(symbol: str, db: Session = Depends(get_db)):
+def remove_stock(symbol: str, email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
     symbol = symbol.upper()
-    item = db.query(Watchlist).filter(Watchlist.symbol == symbol).first()
+    item = db.query(Watchlist).filter(
+        Watchlist.symbol == symbol,
+        Watchlist.user_id == user.id
+    ).first()
     if not item:
         return {"message": f"{symbol} not found"}
     db.delete(item)
     db.commit()
     return {"message": f"{symbol} removed"}
 
+# ─── PORTFOLIO ROUTES ─────────────────────────────────
 @app.get("/portfolio")
-def get_portfolio(db: Session = Depends(get_db)):
-    balance = db.query(Balance).first()
-    holdings = db.query(Holding).all()
+def get_portfolio(email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    balance = db.query(Balance).filter(Balance.user_id == user.id).first()
+    holdings = db.query(Holding).filter(Holding.user_id == user.id).all()
     return {
-        "balance": balance.amount,
+        "balance": balance.amount if balance else 0,
         "holdings": {
             h.symbol: {
                 "quantity": h.quantity,
@@ -184,10 +244,14 @@ def get_portfolio(db: Session = Depends(get_db)):
     }
 
 @app.post("/portfolio/deposit/{amount}")
-def deposit_money(amount: float, db: Session = Depends(get_db)):
+def deposit_money(amount: float, email: str, db: Session = Depends(get_db)):
     if amount <= 0:
         return {"error": "Amount must be greater than 0"}
-    balance = db.query(Balance).first()
+    user = get_current_user(email, db)
+    balance = db.query(Balance).filter(Balance.user_id == user.id).first()
+    if not balance:
+        balance = Balance(amount=0, user_id=user.id)
+        db.add(balance)
     balance.amount = round(balance.amount + amount, 2)
     db.commit()
     return {
@@ -195,19 +259,29 @@ def deposit_money(amount: float, db: Session = Depends(get_db)):
         "balance": balance.amount
     }
 
+# ─── TRADE ROUTES ─────────────────────────────────────
 @app.post("/trade/buy/{symbol}")
-def buy_stock(symbol: str, quantity: float = 1.0, db: Session = Depends(get_db)):
+def buy_stock(
+    symbol: str,
+    email: str,
+    quantity: float = 1.0,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(email, db)
     symbol = symbol.upper()
     data = fetch_stock_data(symbol)
     if not data:
         return {"error": "Stock not found"}
     price = data["price"]
     total_cost = round(price * quantity, 2)
-    balance = db.query(Balance).first()
-    if balance.amount < total_cost:
+    balance = db.query(Balance).filter(Balance.user_id == user.id).first()
+    if not balance or balance.amount < total_cost:
         return {"error": "Insufficient balance"}
     balance.amount = round(balance.amount - total_cost, 2)
-    holding = db.query(Holding).filter(Holding.symbol == symbol).first()
+    holding = db.query(Holding).filter(
+        Holding.symbol == symbol,
+        Holding.user_id == user.id
+    ).first()
     if holding:
         total_qty = holding.quantity + quantity
         holding.avg_price = round(
@@ -215,22 +289,37 @@ def buy_stock(symbol: str, quantity: float = 1.0, db: Session = Depends(get_db))
         )
         holding.quantity = round(total_qty, 4)
     else:
-        db.add(Holding(symbol=symbol, quantity=round(quantity, 4), avg_price=price))
+        db.add(Holding(
+            symbol=symbol,
+            quantity=round(quantity, 4),
+            avg_price=price,
+            user_id=user.id
+        ))
     db.add(Order(
         symbol=symbol,
         order_type="BUY",
         quantity=quantity,
         price=price,
         total=total_cost,
-        timestamp=datetime.now()
+        timestamp=datetime.now(),
+        user_id=user.id
     ))
     db.commit()
     return {"message": f"Bought {quantity} share(s) of {symbol} at ₹{price}"}
 
 @app.post("/trade/sell/{symbol}")
-def sell_stock(symbol: str, quantity: float = 1.0, db: Session = Depends(get_db)):
+def sell_stock(
+    symbol: str,
+    email: str,
+    quantity: float = 1.0,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(email, db)
     symbol = symbol.upper()
-    holding = db.query(Holding).filter(Holding.symbol == symbol).first()
+    holding = db.query(Holding).filter(
+        Holding.symbol == symbol,
+        Holding.user_id == user.id
+    ).first()
     if not holding:
         return {"error": "You don't own this stock"}
     if holding.quantity < quantity:
@@ -240,7 +329,7 @@ def sell_stock(symbol: str, quantity: float = 1.0, db: Session = Depends(get_db)
         return {"error": "Stock not found"}
     price = data["price"]
     total_value = round(price * quantity, 2)
-    balance = db.query(Balance).first()
+    balance = db.query(Balance).filter(Balance.user_id == user.id).first()
     balance.amount = round(balance.amount + total_value, 2)
     holding.quantity = round(holding.quantity - quantity, 4)
     if holding.quantity == 0:
@@ -251,14 +340,19 @@ def sell_stock(symbol: str, quantity: float = 1.0, db: Session = Depends(get_db)
         quantity=quantity,
         price=price,
         total=total_value,
-        timestamp=datetime.now()
+        timestamp=datetime.now(),
+        user_id=user.id
     ))
     db.commit()
     return {"message": f"Sold {quantity} share(s) of {symbol} at ₹{price}"}
 
+# ─── ORDER ROUTES ─────────────────────────────────────
 @app.get("/orders")
-def get_orders(db: Session = Depends(get_db)):
-    orders = db.query(Order).order_by(Order.timestamp.desc()).all()
+def get_orders(email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    orders = db.query(Order).filter(
+        Order.user_id == user.id
+    ).order_by(Order.timestamp.desc()).all()
     return [
         {
             "id": o.id,
@@ -272,9 +366,11 @@ def get_orders(db: Session = Depends(get_db)):
         for o in orders
     ]
 
+# ─── ALERT ROUTES ─────────────────────────────────────
 @app.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-    alerts = db.query(Alert).all()
+def get_alerts(email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    alerts = db.query(Alert).filter(Alert.user_id == user.id).all()
     return [
         {
             "id": a.id,
@@ -287,15 +383,30 @@ def get_alerts(db: Session = Depends(get_db)):
     ]
 
 @app.post("/alerts/add")
-def add_alert(symbol: str, target_price: float, condition: str, db: Session = Depends(get_db)):
-    symbol = symbol.upper()
-    db.add(Alert(symbol=symbol, target_price=target_price, condition=condition))
+def add_alert(
+    symbol: str,
+    target_price: float,
+    condition: str,
+    email: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(email, db)
+    db.add(Alert(
+        symbol=symbol.upper(),
+        target_price=target_price,
+        condition=condition,
+        user_id=user.id
+    ))
     db.commit()
     return {"message": f"Alert set for {symbol} at ₹{target_price}"}
 
 @app.delete("/alerts/delete/{alert_id}")
-def delete_alert(alert_id: int, db: Session = Depends(get_db)):
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+def delete_alert(alert_id: int, email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    alert = db.query(Alert).filter(
+        Alert.id == alert_id,
+        Alert.user_id == user.id
+    ).first()
     if not alert:
         return {"error": "Alert not found"}
     db.delete(alert)
@@ -303,8 +414,12 @@ def delete_alert(alert_id: int, db: Session = Depends(get_db)):
     return {"message": "Alert deleted"}
 
 @app.get("/alerts/check")
-def check_alerts(db: Session = Depends(get_db)):
-    alerts = db.query(Alert).filter(Alert.triggered == 0).all()
+def check_alerts(email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    alerts = db.query(Alert).filter(
+        Alert.user_id == user.id,
+        Alert.triggered == 0
+    ).all()
     triggered = []
     for alert in alerts:
         data = fetch_stock_data(alert.symbol)
@@ -326,12 +441,13 @@ def check_alerts(db: Session = Depends(get_db)):
     db.commit()
     return triggered
 
+# ─── USER ROUTES ──────────────────────────────────────
 @app.get("/user")
-def get_user(db: Session = Depends(get_db)):
-    user = db.query(User).first()
-    orders = db.query(Order).count()
-    holdings = db.query(Holding).count()
-    balance = db.query(Balance).first()
+def get_user(email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    orders = db.query(Order).filter(Order.user_id == user.id).count()
+    holdings = db.query(Holding).filter(Holding.user_id == user.id).count()
+    balance = db.query(Balance).filter(Balance.user_id == user.id).first()
     return {
         "name": user.name,
         "email": user.email,
@@ -339,38 +455,18 @@ def get_user(db: Session = Depends(get_db)):
         "joined": user.joined.strftime("%B %Y"),
         "total_orders": orders,
         "stocks_owned": holdings,
-        "balance": balance.amount,
+        "balance": balance.amount if balance else 0,
     }
 
 @app.put("/user/update")
-def update_user(name: str, email: str, phone: str, db: Session = Depends(get_db)):
-    user = db.query(User).first()
+def update_user(
+    email: str,
+    name: str,
+    phone: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(email, db)
     user.name = name
-    user.email = email
     user.phone = phone
     db.commit()
     return {"message": "Profile updated successfully"}
-
-@app.post("/auth/signup")
-def signup(name: str, email: str, password: str, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == email).first()
-    if existing:
-        return {"error": "Email already registered"}
-    hashed = bcrypt.hash(password)
-    user = User(name=name, email=email, password=hashed, phone="")
-    db.add(user)
-    db.commit()
-    return {"message": "Account created successfully", "name": name, "email": email}
-
-@app.post("/auth/login")
-def login(email: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        return {"error": "Email not found"}
-    if not bcrypt.verify(password, user.password):
-        return {"error": "Wrong password"}
-    return {
-        "message": "Login successful",
-        "name": user.name,
-        "email": user.email,
-    }

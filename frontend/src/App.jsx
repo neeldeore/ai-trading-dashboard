@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import LoginPage from './LoginPage'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import CandlestickChart from './CandlestickChart'
+import LoginPage from './LoginPage'
 
 const colors = {
   bg: '#0a0a0a',
@@ -65,6 +65,18 @@ function Navbar({ onAIClick, onAlertClick, alertCount, onProfileClick }) {
           )}
         </button>
         <button
+          onClick={onProfileClick}
+          style={{
+            padding: '8px 12px',
+            backgroundColor: 'transparent',
+            border: `1px solid ${colors.border}`,
+            borderRadius: '20px',
+            color: colors.text,
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >👤</button>
+        <button
           onClick={onAIClick}
           style={{
             padding: '8px 20px',
@@ -77,18 +89,6 @@ function Navbar({ onAIClick, onAlertClick, alertCount, onProfileClick }) {
             fontSize: '14px',
           }}
         >🤖 Ask AI</button>
-        <button
-          onClick={onProfileClick}
-          style={{
-            padding: '8px 12px',
-            backgroundColor: 'transparent',
-            border: `1px solid ${colors.border}`,
-            borderRadius: '20px',
-            color: colors.text,
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >👤</button>
       </div>
     </div>
   )
@@ -321,7 +321,7 @@ function AIPopup({ onClose, stocks }) {
   )
 }
 
-function AlertsPopup({ onClose, alerts, stocks, onAlertsChange }) {
+function AlertsPopup({ onClose, alerts, stocks, onAlertsChange, email }) {
   const [symbol, setSymbol] = useState('')
   const [targetPrice, setTargetPrice] = useState('')
   const [condition, setCondition] = useState('above')
@@ -329,7 +329,7 @@ function AlertsPopup({ onClose, alerts, stocks, onAlertsChange }) {
 
   function handleAddAlert() {
     if (!symbol || !targetPrice) { setMessage('Fill all fields'); return }
-    fetch(`http://localhost:8000/alerts/add?symbol=${symbol}&target_price=${targetPrice}&condition=${condition}`, {
+    fetch(`http://localhost:8000/alerts/add?symbol=${symbol}&target_price=${targetPrice}&condition=${condition}&email=${email}`, {
       method: 'POST'
     })
       .then(res => res.json())
@@ -337,7 +337,7 @@ function AlertsPopup({ onClose, alerts, stocks, onAlertsChange }) {
   }
 
   function handleDeleteAlert(id) {
-    fetch(`http://localhost:8000/alerts/delete/${id}`, { method: 'DELETE' })
+    fetch(`http://localhost:8000/alerts/delete/${id}?email=${email}`, { method: 'DELETE' })
       .then(res => res.json())
       .then(() => onAlertsChange())
   }
@@ -438,6 +438,184 @@ function AlertsPopup({ onClose, alerts, stocks, onAlertsChange }) {
   )
 }
 
+function ProfilePanel({ onClose, onTabChange, onLogout, email }) {
+  const [user, setUser] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    fetch(`http://localhost:8000/user?email=${email}`)
+      .then(res => res.json())
+      .then(data => {
+        setUser(data)
+        setName(data.name)
+        setPhone(data.phone)
+      })
+  }, [])
+
+  function handleUpdate() {
+    fetch(`http://localhost:8000/user/update?email=${email}&name=${name}&phone=${phone}`, {
+      method: 'PUT'
+    })
+      .then(res => res.json())
+      .then(data => {
+        setMessage(data.message)
+        setEditing(false)
+        fetch(`http://localhost:8000/user?email=${email}`)
+          .then(res => res.json())
+          .then(data => setUser(data))
+      })
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, right: 0,
+      width: '320px', height: '100%',
+      backgroundColor: colors.card,
+      borderLeft: `1px solid ${colors.border}`,
+      zIndex: 200,
+      display: 'flex', flexDirection: 'column',
+      overflowY: 'auto',
+    }}>
+      <div style={{
+        padding: '24px',
+        borderBottom: `1px solid ${colors.border}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+      }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+            <div style={{
+              width: '48px', height: '48px',
+              borderRadius: '50%',
+              backgroundColor: colors.cyan,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '20px', fontWeight: 'bold', color: 'black',
+            }}>
+              {user ? user.name[0].toUpperCase() : '?'}
+            </div>
+            <div>
+              <p style={{ margin: 0, fontWeight: 'bold', color: colors.text, fontSize: '16px' }}>
+                {user ? user.name : 'Loading...'}
+              </p>
+              <p style={{ margin: 0, color: colors.muted, fontSize: '12px' }}>
+                {user ? user.email : ''}
+              </p>
+            </div>
+          </div>
+          <p style={{ margin: 0, color: colors.muted, fontSize: '12px' }}>
+            Member since {user ? user.joined : ''}
+          </p>
+        </div>
+        <button
+          onClick={() => setEditing(!editing)}
+          style={{
+            backgroundColor: 'transparent',
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px', padding: '6px 10px',
+            color: colors.muted, cursor: 'pointer', fontSize: '16px',
+          }}
+        >⚙️</button>
+      </div>
+
+      {editing && (
+        <div style={{ padding: '16px', borderBottom: `1px solid ${colors.border}` }}>
+          <p style={{ margin: '0 0 12px', color: colors.cyan, fontWeight: 'bold' }}>Edit Profile</p>
+          {[
+            { label: 'Name', value: name, setter: setName },
+            { label: 'Phone', value: phone, setter: setPhone },
+          ].map(field => (
+            <div key={field.label} style={{ marginBottom: '10px' }}>
+              <p style={{ margin: '0 0 4px', color: colors.muted, fontSize: '12px' }}>{field.label}</p>
+              <input
+                value={field.value}
+                onChange={(e) => field.setter(e.target.value)}
+                style={{
+                  width: '100%', padding: '8px', borderRadius: '6px',
+                  border: `1px solid ${colors.border}`,
+                  backgroundColor: '#0d0d0d', color: colors.text,
+                  fontSize: '14px', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          ))}
+          <button onClick={handleUpdate} style={{
+            width: '100%', padding: '10px',
+            backgroundColor: colors.cyan, border: 'none',
+            borderRadius: '8px', color: 'black',
+            fontWeight: 'bold', cursor: 'pointer',
+          }}>Save Changes</button>
+          {message && <p style={{ color: colors.green, fontSize: '13px', marginTop: '8px' }}>{message}</p>}
+        </div>
+      )}
+
+      <div style={{ padding: '16px', borderBottom: `1px solid ${colors.border}` }}>
+        <p style={{ margin: '0 0 12px', color: colors.muted, fontSize: '12px' }}>PORTFOLIO SUMMARY</p>
+        {user && [
+          { label: 'Available Balance', value: `₹${user.balance.toLocaleString()}` },
+          { label: 'Stocks Owned', value: user.stocks_owned },
+          { label: 'Total Orders', value: user.total_orders },
+          { label: 'Member Since', value: user.joined },
+        ].map(item => (
+          <div key={item.label} style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '12px 0',
+            borderBottom: `1px solid ${colors.border}`,
+          }}>
+            <span style={{ color: colors.muted, fontSize: '14px' }}>{item.label}</span>
+            <span style={{ color: colors.text, fontWeight: 'bold', fontSize: '14px' }}>{item.value}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ padding: '16px' }}>
+        <p style={{ margin: '0 0 12px', color: colors.muted, fontSize: '12px' }}>QUICK LINKS</p>
+        {[
+          { label: '💰 Holdings', tab: 'Holdings' },
+          { label: '📋 All Orders', tab: 'Orders' },
+          { label: '👀 Watchlist', tab: 'Watchlist' },
+        ].map(item => (
+          <div
+            key={item.label}
+            onClick={() => { onTabChange(item.tab); onClose() }}
+            style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '14px 0',
+              borderBottom: `1px solid ${colors.border}`,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ color: colors.text, fontSize: '14px' }}>{item.label}</span>
+            <span style={{ color: colors.muted }}>›</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ padding: '16px', marginTop: 'auto' }}>
+        <button onClick={onClose} style={{
+          width: '100%', padding: '12px', marginBottom: '8px',
+          backgroundColor: 'transparent',
+          border: `1px solid ${colors.border}`,
+          borderRadius: '8px', color: colors.muted,
+          cursor: 'pointer', fontSize: '14px',
+        }}>Close</button>
+        <button onClick={onLogout} style={{
+          width: '100%', padding: '12px',
+          backgroundColor: 'transparent',
+          border: `1px solid ${colors.red}`,
+          borderRadius: '8px', color: colors.red,
+          cursor: 'pointer', fontSize: '14px',
+          fontWeight: 'bold',
+        }}>Log Out</button>
+      </div>
+    </div>
+  )
+}
+
 function ExploreTab({ stocks, selectedStock, history, onStockClick, onRemove, onBuy, onSell, onAddStock }) {
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
@@ -445,9 +623,9 @@ function ExploreTab({ stocks, selectedStock, history, onStockClick, onRemove, on
   function handleAdd() {
     if (!search) return
     setMessage('Adding...')
-    fetch(`http://localhost:8000/watchlist/add/${search}`, { method: 'POST' })
+    fetch(`http://localhost:8000/watchlist/add/${search}?email=${onAddStock.email}`, { method: 'POST' })
       .then(res => res.json())
-      .then(data => { setMessage(data.message); setSearch(''); onAddStock() })
+      .then(data => { setMessage(data.message); setSearch(''); onAddStock.reload() })
   }
 
   return (
@@ -497,9 +675,7 @@ function HoldingsTab({ portfolio, stocks, onBuy, onSell, onDeposit }) {
   function handleDeposit() {
     const amount = parseFloat(depositAmount)
     if (!amount || amount <= 0) { setMessage('Enter valid amount'); return }
-    fetch(`http://localhost:8000/portfolio/deposit/${amount}`, { method: 'POST' })
-      .then(res => res.json())
-      .then(data => { setMessage(data.message); setDepositAmount(''); onDeposit() })
+    onDeposit(amount, setMessage, setDepositAmount)
   }
 
   const totalHoldingsValue = Object.entries(portfolio.holdings).reduce(
@@ -670,11 +846,11 @@ function WatchlistTab({ stocks, onBuy, onSell, onRemove }) {
   )
 }
 
-function OrdersTab() {
+function OrdersTab({ email }) {
   const [orders, setOrders] = useState([])
 
   useEffect(() => {
-    fetch('http://localhost:8000/orders')
+    fetch(`http://localhost:8000/orders?email=${email}`)
       .then(res => res.json())
       .then(data => setOrders(data))
   }, [])
@@ -732,194 +908,7 @@ function OrdersTab() {
   )
 }
 
-function ProfilePanel({ onClose, onTabChange, onLogout }) {
-  const [user, setUser] = useState(null)
-  const [editing, setEditing] = useState(false)
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [message, setMessage] = useState('')
-
-  useEffect(() => {
-    fetch('http://localhost:8000/user')
-      .then(res => res.json())
-      .then(data => {
-        setUser(data)
-        setName(data.name)
-        setEmail(data.email)
-        setPhone(data.phone)
-      })
-  }, [])
-
-  function handleUpdate() {
-    fetch(`http://localhost:8000/user/update?name=${name}&email=${email}&phone=${phone}`, {
-      method: 'PUT'
-    })
-      .then(res => res.json())
-      .then(data => {
-        setMessage(data.message)
-        setEditing(false)
-        fetch('http://localhost:8000/user')
-          .then(res => res.json())
-          .then(data => setUser(data))
-      })
-  }
-
-  return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0,
-      width: '320px', height: '100%',
-      backgroundColor: colors.card,
-      borderLeft: `1px solid ${colors.border}`,
-      zIndex: 200,
-      display: 'flex', flexDirection: 'column',
-      overflowY: 'auto',
-    }}>
-      <div style={{
-        padding: '24px',
-        borderBottom: `1px solid ${colors.border}`,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <div style={{
-              width: '48px', height: '48px',
-              borderRadius: '50%',
-              backgroundColor: colors.cyan,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '20px', fontWeight: 'bold', color: 'black',
-            }}>
-              {user ? user.name[0].toUpperCase() : '?'}
-            </div>
-            <div>
-              <p style={{ margin: 0, fontWeight: 'bold', color: colors.text, fontSize: '16px' }}>
-                {user ? user.name : 'Loading...'}
-              </p>
-              <p style={{ margin: 0, color: colors.muted, fontSize: '12px' }}>
-                {user ? user.email || 'No email set' : ''}
-              </p>
-            </div>
-          </div>
-          <p style={{ margin: 0, color: colors.muted, fontSize: '12px' }}>
-            Member since {user ? user.joined : ''}
-          </p>
-        </div>
-        <button
-          onClick={() => setEditing(!editing)}
-          style={{
-            backgroundColor: 'transparent',
-            border: `1px solid ${colors.border}`,
-            borderRadius: '8px', padding: '6px 10px',
-            color: colors.muted, cursor: 'pointer', fontSize: '16px',
-          }}
-        >⚙️</button>
-      </div>
-
-      {editing && (
-        <div style={{ padding: '16px', borderBottom: `1px solid ${colors.border}` }}>
-          <p style={{ margin: '0 0 12px', color: colors.cyan, fontWeight: 'bold' }}>Edit Profile</p>
-          {[
-            { label: 'Name', value: name, setter: setName },
-            { label: 'Email', value: email, setter: setEmail },
-            { label: 'Phone', value: phone, setter: setPhone },
-          ].map(field => (
-            <div key={field.label} style={{ marginBottom: '10px' }}>
-              <p style={{ margin: '0 0 4px', color: colors.muted, fontSize: '12px' }}>{field.label}</p>
-              <input
-                value={field.value}
-                onChange={(e) => field.setter(e.target.value)}
-                style={{
-                  width: '100%', padding: '8px', borderRadius: '6px',
-                  border: `1px solid ${colors.border}`,
-                  backgroundColor: '#0d0d0d', color: colors.text,
-                  fontSize: '14px', boxSizing: 'border-box',
-                }}
-              />
-            </div>
-          ))}
-          <button onClick={handleUpdate} style={{
-            width: '100%', padding: '10px',
-            backgroundColor: colors.cyan, border: 'none',
-            borderRadius: '8px', color: 'black',
-            fontWeight: 'bold', cursor: 'pointer',
-          }}>Save Changes</button>
-          {message && <p style={{ color: colors.green, fontSize: '13px', marginTop: '8px' }}>{message}</p>}
-        </div>
-      )}
-
-      <div style={{ padding: '16px', borderBottom: `1px solid ${colors.border}` }}>
-        <p style={{ margin: '0 0 12px', color: colors.muted, fontSize: '12px' }}>PORTFOLIO SUMMARY</p>
-        {user && [
-          { label: 'Available Balance', value: `₹${user.balance.toLocaleString()}` },
-          { label: 'Stocks Owned', value: user.stocks_owned },
-          { label: 'Total Orders', value: user.total_orders },
-          { label: 'Member Since', value: user.joined },
-        ].map(item => (
-          <div key={item.label} style={{
-            display: 'flex', justifyContent: 'space-between',
-            padding: '12px 0',
-            borderBottom: `1px solid ${colors.border}`,
-          }}>
-            <span style={{ color: colors.muted, fontSize: '14px' }}>{item.label}</span>
-            <span style={{ color: colors.text, fontWeight: 'bold', fontSize: '14px' }}>{item.value}</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ padding: '16px' }}>
-        <p style={{ margin: '0 0 12px', color: colors.muted, fontSize: '12px' }}>QUICK LINKS</p>
-        {[
-          { label: '💰 Holdings', tab: 'Holdings' },
-          { label: '📋 All Orders', tab: 'Orders' },
-          { label: '👀 Watchlist', tab: 'Watchlist' },
-        ].map(item => (
-          <div
-            key={item.label}
-            onClick={() => { onTabChange(item.tab); onClose() }}
-            style={{
-              display: 'flex', justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '14px 0',
-              borderBottom: `1px solid ${colors.border}`,
-              cursor: 'pointer',
-            }}
-          >
-            <span style={{ color: colors.text, fontSize: '14px' }}>{item.label}</span>
-            <span style={{ color: colors.muted }}>›</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ padding: '16px', marginTop: 'auto' }}>
-        <button
-          onClick={onClose}
-          style={{
-            width: '100%', padding: '12px',  marginBottom: '8px',
-            backgroundColor: 'transparent',
-            border: `1px solid ${colors.border}`,
-            borderRadius: '8px', color: colors.muted,
-            cursor: 'pointer', fontSize: '14px',
-          }}
-        >Close</button>
-        <button
-          onClick={onLogout}
-          style={{
-            width: '100%', padding: '12px',
-            backgroundColor: 'transparent',
-            border: `1px solid ${colors.red}`,
-            borderRadius: '8px', color: colors.red,
-            cursor: 'pointer', fontSize: '14px',
-            fontWeight: 'bold',
-          }}
-        >Log Out</button>
-      </div>
-    </div>
-  )
-}
-
-function App() {
+function Dashboard({ currentUser, onLogout }) {
   const [stocks, setStocks] = useState({})
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState(null)
@@ -929,10 +918,6 @@ function App() {
   const [showAI, setShowAI] = useState(false)
   const [showAlerts, setShowAlerts] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('user')
-    return saved ? JSON.parse(saved) : null
-  })
   const [alerts, setAlerts] = useState([])
   const [triggeredAlerts, setTriggeredAlerts] = useState([])
   const [indices] = useState([
@@ -942,27 +927,29 @@ function App() {
     { name: 'MIDCAP', value: '14,168', change: -0.68 },
   ])
 
+  const email = currentUser.email
+
   function loadStocks() {
     setLoading(true)
-    fetch('http://localhost:8000/stocks')
+    fetch(`http://localhost:8000/stocks?email=${email}`)
       .then(res => res.json())
       .then(data => { setStocks(data); setLoading(false) })
   }
 
   function loadPortfolio() {
-    fetch('http://localhost:8000/portfolio')
+    fetch(`http://localhost:8000/portfolio?email=${email}`)
       .then(res => res.json())
       .then(data => setPortfolio(data))
   }
 
   function loadAlerts() {
-    fetch('http://localhost:8000/alerts')
+    fetch(`http://localhost:8000/alerts?email=${email}`)
       .then(res => res.json())
       .then(data => setAlerts(data))
   }
 
   function checkAlerts() {
-    fetch('http://localhost:8000/alerts/check')
+    fetch(`http://localhost:8000/alerts/check?email=${email}`)
       .then(res => res.json())
       .then(data => { if (data.length > 0) setTriggeredAlerts(data) })
   }
@@ -983,7 +970,7 @@ function App() {
   }
 
   function handleRemoveStock(symbol) {
-    fetch(`http://localhost:8000/watchlist/remove/${symbol}`, { method: 'DELETE' })
+    fetch(`http://localhost:8000/watchlist/remove/${symbol}?email=${email}`, { method: 'DELETE' })
       .then(res => res.json())
       .then(() => {
         if (selectedStock === symbol) { setSelectedStock(null); setHistory([]) }
@@ -992,7 +979,7 @@ function App() {
   }
 
   function handleBuy(symbol, qty = 1) {
-    fetch(`http://localhost:8000/trade/buy/${symbol}?quantity=${qty}`, { method: 'POST' })
+    fetch(`http://localhost:8000/trade/buy/${symbol}?email=${email}&quantity=${qty}`, { method: 'POST' })
       .then(res => res.json())
       .then(data => {
         if (data.error) { alert(data.error); return }
@@ -1002,7 +989,7 @@ function App() {
   }
 
   function handleSell(symbol, qty = 1) {
-    fetch(`http://localhost:8000/trade/sell/${symbol}?quantity=${qty}`, { method: 'POST' })
+    fetch(`http://localhost:8000/trade/sell/${symbol}?email=${email}&quantity=${qty}`, { method: 'POST' })
       .then(res => res.json())
       .then(data => {
         if (data.error) { alert(data.error); return }
@@ -1011,23 +998,40 @@ function App() {
       })
   }
 
+  function handleDeposit(amount, setMessage, setDepositAmount) {
+    fetch(`http://localhost:8000/portfolio/deposit/${amount}?email=${email}`, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        setMessage(data.message)
+        setDepositAmount('')
+        loadPortfolio()
+      })
+  }
+
   function renderTab() {
     if (loading) return <p style={{ color: colors.text, padding: '24px' }}>Loading stocks...</p>
     switch (activeTab) {
-      case 'Explore': return <ExploreTab stocks={stocks} selectedStock={selectedStock}
-        history={history} onStockClick={handleStockClick} onRemove={handleRemoveStock}
-        onBuy={handleBuy} onSell={handleSell} onAddStock={loadStocks} />
-      case 'Watchlist': return <WatchlistTab stocks={stocks} onBuy={handleBuy}
-        onSell={handleSell} onRemove={handleRemoveStock} />
-      case 'Holdings': return <HoldingsTab portfolio={portfolio} stocks={stocks}
-        onBuy={handleBuy} onSell={handleSell} onDeposit={loadPortfolio} />
-      case 'Orders': return <OrdersTab />
+      case 'Explore': return (
+        <ExploreTab
+          stocks={stocks}
+          selectedStock={selectedStock}
+          history={history}
+          onStockClick={handleStockClick}
+          onRemove={handleRemoveStock}
+          onBuy={handleBuy}
+          onSell={handleSell}
+          onAddStock={{ email, reload: loadStocks }}
+        />
+      )
+      case 'Watchlist': return (
+        <WatchlistTab stocks={stocks} onBuy={handleBuy} onSell={handleSell} onRemove={handleRemoveStock} />
+      )
+      case 'Holdings': return (
+        <HoldingsTab portfolio={portfolio} stocks={stocks} onBuy={handleBuy} onSell={handleSell} onDeposit={handleDeposit} />
+      )
+      case 'Orders': return <OrdersTab email={email} />
       default: return null
     }
-  }
-
-  if (!currentUser) {
-    return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />
   }
 
   return (
@@ -1042,23 +1046,21 @@ function App() {
       <Tabs activeTab={activeTab} onTabChange={setActiveTab} />
       {renderTab()}
       {showAI && <AIPopup onClose={() => setShowAI(false)} stocks={stocks} />}
-      {showProfile && (
-       <ProfilePanel
-          onClose={() => setShowProfile(false)}
-          onTabChange={setActiveTab}
-          onLogout={() => {
-            localStorage.removeItem('user')
-            setCurrentUser(null)
-            setShowProfile(false)
-          }}
-        />
-      )}
       {showAlerts && (
         <AlertsPopup
           onClose={() => setShowAlerts(false)}
           alerts={alerts}
           stocks={stocks}
           onAlertsChange={loadAlerts}
+          email={email}
+        />
+      )}
+      {showProfile && (
+        <ProfilePanel
+          onClose={() => setShowProfile(false)}
+          onTabChange={setActiveTab}
+          email={email}
+          onLogout={onLogout}
         />
       )}
       {triggeredAlerts.length > 0 && (
@@ -1090,6 +1092,29 @@ function App() {
       )}
     </div>
   )
+}
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('user')
+    return saved ? JSON.parse(saved) : null
+  })
+
+  function handleLogin(user) {
+    localStorage.setItem('user', JSON.stringify(user))
+    setCurrentUser(user)
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('user')
+    setCurrentUser(null)
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={handleLogin} />
+  }
+
+  return <Dashboard currentUser={currentUser} onLogout={handleLogout} />
 }
 
 export default App
