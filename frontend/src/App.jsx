@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, ReferenceLine } from 'recharts'
 import CandlestickChart from './CandlestickChart'
 import LoginPage from './LoginPage'
+import StockDetailPage from './StockDetailPage'
 
 const colors = {
   bg: '#0a0a0a',
@@ -15,11 +16,30 @@ const colors = {
   muted: '#888',
 }
 
-function Navbar({ onAIClick, onAlertClick, alertCount, onProfileClick }) {
+function Navbar({ onAlertClick, alertCount, onProfileClick, onAIClick, onSearch }) {
+  const [search, setSearch] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  function handleSearchChange(value) {
+    setSearch(value)
+    if (value.length < 1) { setSuggestions([]); setShowSuggestions(false); return }
+    fetch(`http://localhost:8000/stocks/search?query=${value}`)
+      .then(res => res.json())
+      .then(data => { setSuggestions(data); setShowSuggestions(true) })
+  }
+
+  function handleSelect(symbol) {
+    setSearch('')
+    setSuggestions([])
+    setShowSuggestions(false)
+    onSearch(symbol)
+  }
+
   return (
     <div style={{
       backgroundColor: '#0d0d0d',
-      borderBottom: `1px solid ${colors.border}`,
+      borderBottom: `1px solid #222`,
       padding: '0 24px',
       display: 'flex',
       alignItems: 'center',
@@ -31,64 +51,79 @@ function Navbar({ onAIClick, onAlertClick, alertCount, onProfileClick }) {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ fontSize: '24px' }}>📈</span>
-        <span style={{ color: colors.text, fontWeight: 'bold', fontSize: '18px' }}>
+        <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>
           AI Trading Dashboard
         </span>
       </div>
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <button
-          onClick={onAlertClick}
+
+      <div style={{ position: 'relative', flex: 1, maxWidth: '400px', margin: '0 24px' }}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value.toUpperCase())}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+          onFocus={() => search.length > 0 && setShowSuggestions(true)}
+          placeholder="🔍 Search any stock..."
           style={{
-            position: 'relative',
-            padding: '8px 12px',
-            backgroundColor: 'transparent',
-            border: `1px solid ${colors.border}`,
-            borderRadius: '20px',
-            color: colors.text,
-            cursor: 'pointer',
-            fontSize: '18px',
+            width: '100%', padding: '8px 16px', borderRadius: '20px',
+            border: '1px solid #333',
+            backgroundColor: '#1a1a1a', color: '#fff',
+            fontSize: '14px', boxSizing: 'border-box', outline: 'none',
           }}
-        >
+        />
+        {showSuggestions && suggestions.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0,
+            width: '100%', backgroundColor: '#141414',
+            border: '1px solid #222', borderRadius: '8px',
+            zIndex: 200, marginTop: '4px',
+            maxHeight: '280px', overflowY: 'auto',
+          }}>
+            {suggestions.map(s => (
+              <div
+                key={s.symbol}
+                onMouseDown={() => handleSelect(s.symbol)}
+                style={{
+                  padding: '10px 16px', cursor: 'pointer',
+                  borderBottom: '1px solid #222',
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#1a1a1a'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <span style={{ color: '#00bcd4', fontWeight: 'bold', fontSize: '14px' }}>
+                  {s.symbol}
+                </span>
+                <span style={{ color: '#888', fontSize: '12px' }}>{s.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <button onClick={onAlertClick} style={{
+          position: 'relative', padding: '8px 12px',
+          backgroundColor: 'transparent', border: '1px solid #222',
+          borderRadius: '20px', color: '#fff', cursor: 'pointer', fontSize: '18px',
+        }}>
           🔔
           {alertCount > 0 && (
             <span style={{
-              position: 'absolute',
-              top: '-4px', right: '-4px',
-              backgroundColor: colors.red,
-              color: 'white',
-              borderRadius: '50%',
-              width: '18px', height: '18px',
-              fontSize: '11px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 'bold',
+              position: 'absolute', top: '-4px', right: '-4px',
+              backgroundColor: '#f44336', color: 'white',
+              borderRadius: '50%', width: '18px', height: '18px',
+              fontSize: '11px', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontWeight: 'bold',
             }}>{alertCount}</span>
           )}
         </button>
-        <button
-          onClick={onProfileClick}
-          style={{
-            padding: '8px 12px',
-            backgroundColor: 'transparent',
-            border: `1px solid ${colors.border}`,
-            borderRadius: '20px',
-            color: colors.text,
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >👤</button>
-        <button
-          onClick={onAIClick}
-          style={{
-            padding: '8px 20px',
-            backgroundColor: colors.cyan,
-            border: 'none',
-            borderRadius: '20px',
-            color: 'black',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >🤖 Ask AI</button>
+        <button onClick={onProfileClick} style={{
+          padding: '8px 12px', backgroundColor: 'transparent',
+          border: '1px solid #222', borderRadius: '20px',
+          color: '#fff', cursor: 'pointer', fontSize: '14px',
+        }}>👤</button>
       </div>
     </div>
   )
@@ -118,7 +153,7 @@ function IndicesBar({ indices }) {
 }
 
 function Tabs({ activeTab, onTabChange }) {
-  const tabs = ['Explore', 'Watchlist', 'Holdings', 'Orders']
+  const tabs = ['Explore', 'Watchlist', 'Holdings', 'Orders', 'Analytics']
   return (
     <div style={{
       backgroundColor: '#0d0d0d',
@@ -394,6 +429,7 @@ function AlertsPopup({ onClose, alerts, stocks, onAlertsChange, email }) {
             type="number"
             value={targetPrice}
             onChange={(e) => setTargetPrice(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddAlert()}
             placeholder="Target ₹"
             style={{
               width: '120px', padding: '10px', borderRadius: '8px',
@@ -616,46 +652,15 @@ function ProfilePanel({ onClose, onTabChange, onLogout, email }) {
   )
 }
 
-function ExploreTab({ stocks, selectedStock, history, onStockClick, onRemove, onBuy, onSell, onAddStock }) {
-  const [search, setSearch] = useState('')
-  const [message, setMessage] = useState('')
-
-  function handleAdd() {
-    if (!search) return
-    setMessage('Adding...')
-    fetch(`http://localhost:8000/watchlist/add/${search}?email=${onAddStock.email}`, { method: 'POST' })
-      .then(res => res.json())
-      .then(data => { setMessage(data.message); setSearch(''); onAddStock.reload() })
-  }
-
+function ExploreTab({ stocks, selectedStock, history, onStockClick, onRemove, onBuy, onSell, onAddStock, onViewDetail }) {
   return (
     <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value.toUpperCase())}
-          placeholder="Search stock e.g. WIPRO"
-          style={{
-            padding: '10px 16px', borderRadius: '8px',
-            border: `1px solid ${colors.border}`,
-            backgroundColor: colors.card,
-            color: colors.text, width: '280px', fontSize: '14px',
-          }}
-        />
-        <button onClick={handleAdd} style={{
-          padding: '10px 20px', backgroundColor: colors.cyan,
-          border: 'none', borderRadius: '8px',
-          color: 'black', fontWeight: 'bold', cursor: 'pointer',
-        }}>+ Add Stock</button>
-        {message && <p style={{ color: colors.muted, margin: 'auto 8px' }}>{message}</p>}
-      </div>
       <h3 style={{ color: colors.muted, marginBottom: '12px' }}>Market Overview</h3>
       <div style={{ display: 'flex', flexWrap: 'wrap' }}>
         {Object.entries(stocks).map(([symbol, data]) => (
           <StockCard
             key={symbol} symbol={symbol} data={data}
-            onClick={onStockClick}
+            onClick={(s) => onViewDetail(s)}
             isSelected={selectedStock === symbol}
             onRemove={onRemove}
             onBuy={onBuy}
@@ -663,7 +668,7 @@ function ExploreTab({ stocks, selectedStock, history, onStockClick, onRemove, on
           />
         ))}
       </div>
-      {selectedStock && <StockChart symbol={selectedStock} history={history} />}
+      {selectedStock && <CandlestickChart symbol={selectedStock} data={history} />}
     </div>
   )
 }
@@ -908,6 +913,225 @@ function OrdersTab({ email }) {
   )
 }
 
+function AnalyticsTab({ email }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`http://localhost:8000/analytics?email=${email}`)
+      .then(res => res.json())
+      .then(d => { setData(d); setLoading(false) })
+  }, [])
+
+  if (loading) return (
+    <div style={{ padding: '24px' }}>
+      <p style={{ color: colors.muted }}>Loading analytics...</p>
+    </div>
+  )
+
+  if (!data) return null
+
+  const statCards = [
+    { label: 'Total Invested', value: `₹${data.total_invested.toLocaleString()}`, color: colors.text },
+    { label: 'Current Value', value: `₹${data.current_value.toLocaleString()}`, color: colors.cyan },
+    { label: 'Total P&L', value: `${data.total_pnl >= 0 ? '+' : ''}₹${data.total_pnl.toFixed(2)}`, color: data.total_pnl >= 0 ? colors.green : colors.red },
+    { label: 'P&L %', value: `${data.total_pnl_percent >= 0 ? '+' : ''}${data.total_pnl_percent}%`, color: data.total_pnl_percent >= 0 ? colors.green : colors.red },
+    { label: 'Available Balance', value: `₹${data.balance.toLocaleString()}`, color: colors.green },
+    { label: 'Total Orders', value: data.total_orders, color: colors.text },
+    { label: 'Win Rate', value: `${data.win_rate}%`, color: data.win_rate >= 50 ? colors.green : colors.orange },
+  ]
+
+  const DONUT_COLORS = ['#00bcd4', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#2196f3']
+
+  const donutData = data.stock_pnl.map((s, i) => ({
+    name: s.symbol,
+    value: parseFloat(s.current.toFixed(2)),
+    color: DONUT_COLORS[i % DONUT_COLORS.length]
+  }))
+
+  const barData = data.stock_pnl.map(s => ({
+    symbol: s.symbol,
+    pnl: s.pnl,
+    fill: s.pnl >= 0 ? '#4caf50' : '#f44336'
+  }))
+
+  return (
+    <div style={{ padding: '24px' }}>
+      <h2 style={{ color: colors.text, marginTop: 0 }}>📊 Portfolio Analytics</h2>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '32px' }}>
+        {statCards.map(card => (
+          <div key={card.label} style={{
+            backgroundColor: colors.card,
+            borderRadius: '12px',
+            padding: '20px 24px',
+            border: `1px solid ${colors.border}`,
+            minWidth: '160px',
+            flex: '1',
+          }}>
+            <p style={{ margin: 0, color: colors.muted, fontSize: '12px' }}>{card.label}</p>
+            <p style={{ margin: '6px 0 0', fontSize: '20px', fontWeight: 'bold', color: card.color }}>
+              {card.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+
+        {donutData.length > 0 && (
+          <div style={{
+            backgroundColor: colors.card,
+            borderRadius: '12px',
+            padding: '24px',
+            border: `1px solid ${colors.border}`,
+            flex: '1',
+            minWidth: '300px',
+          }}>
+            <h3 style={{ color: colors.text, marginTop: 0 }}>🍩 Portfolio Composition</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={donutData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={110}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {donutData.map((entry, index) => (
+                    <Cell key={index} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#333', border: 'none' }}
+                  formatter={(value) => [`₹${value}`, 'Value']}
+                />
+                <Legend
+                  formatter={(value) => <span style={{ color: colors.text }}>{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {data.order_history.length > 0 && (
+          <div style={{
+            backgroundColor: colors.card,
+            borderRadius: '12px',
+            padding: '24px',
+            border: `1px solid ${colors.border}`,
+            flex: '2',
+            minWidth: '300px',
+          }}>
+            <h3 style={{ color: colors.text, marginTop: 0 }}>💰 Portfolio Value Over Time</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={data.order_history}>
+                <XAxis dataKey="date" stroke={colors.muted} />
+                <YAxis stroke={colors.muted} domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#333', border: 'none' }}
+                  labelStyle={{ color: colors.cyan }}
+                  formatter={(value) => [`₹${value.toLocaleString()}`, 'Balance']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke={colors.cyan}
+                  strokeWidth={2}
+                  dot={{ fill: colors.cyan, r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {barData.length > 0 && (
+        <div style={{
+          backgroundColor: colors.card,
+          borderRadius: '12px',
+          padding: '24px',
+          border: `1px solid ${colors.border}`,
+          marginBottom: '24px',
+        }}>
+          <h3 style={{ color: colors.text, marginTop: 0 }}>📈 P&L Per Stock</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={barData} barSize={48}>
+              <XAxis dataKey="symbol" stroke={colors.muted} />
+              <YAxis stroke={colors.muted} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#333', border: 'none' }}
+                labelStyle={{ color: colors.cyan }}
+                formatter={(value) => [`₹${value.toFixed(2)}`, 'P&L']}
+              />
+              <ReferenceLine y={0} stroke={colors.muted} strokeDasharray="3 3" />
+              <Bar dataKey="pnl" radius={[4, 4, 4, 4]}
+                label={{ position: 'top', fill: colors.muted, fontSize: 11,
+                  formatter: (v) => `₹${v.toFixed(0)}` }}>
+                {barData.map((entry, index) => (
+                  <Cell key={index} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {data.stock_pnl.length > 0 && (
+        <div style={{
+          backgroundColor: colors.card,
+          borderRadius: '12px',
+          border: `1px solid ${colors.border}`,
+          overflow: 'hidden',
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#1a1a1a' }}>
+                {['Symbol', 'Invested', 'Current Value', 'P&L', 'P&L %'].map(h => (
+                  <th key={h} style={{
+                    padding: '12px 16px', color: colors.muted,
+                    fontSize: '12px', textAlign: 'left', fontWeight: 'normal',
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.stock_pnl.map(stock => (
+                <tr key={stock.symbol} style={{ borderTop: `1px solid ${colors.border}` }}>
+                  <td style={{ padding: '12px 16px', color: colors.cyan, fontWeight: 'bold' }}>{stock.symbol}</td>
+                  <td style={{ padding: '12px 16px' }}>₹{stock.invested.toLocaleString()}</td>
+                  <td style={{ padding: '12px 16px' }}>₹{stock.current.toLocaleString()}</td>
+                  <td style={{ padding: '12px 16px', color: stock.pnl >= 0 ? colors.green : colors.red }}>
+                    {stock.pnl >= 0 ? '+' : ''}₹{stock.pnl.toFixed(2)}
+                  </td>
+                  <td style={{ padding: '12px 16px', color: stock.pnl_percent >= 0 ? colors.green : colors.red }}>
+                    {stock.pnl_percent >= 0 ? '+' : ''}{stock.pnl_percent}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {data.stock_pnl.length === 0 && (
+        <div style={{
+          backgroundColor: colors.card,
+          borderRadius: '12px',
+          padding: '48px',
+          textAlign: 'center',
+          border: `1px solid ${colors.border}`,
+        }}>
+          <p style={{ color: colors.muted, fontSize: '16px' }}>No holdings to analyze yet.</p>
+          <p style={{ color: colors.muted, fontSize: '13px' }}>Buy some stocks to see your analytics!</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Dashboard({ currentUser, onLogout }) {
   const [stocks, setStocks] = useState({})
   const [loading, setLoading] = useState(true)
@@ -920,12 +1144,8 @@ function Dashboard({ currentUser, onLogout }) {
   const [showProfile, setShowProfile] = useState(false)
   const [alerts, setAlerts] = useState([])
   const [triggeredAlerts, setTriggeredAlerts] = useState([])
-  const [indices] = useState([
-    { name: 'NIFTY', value: '23,643', change: -0.19 },
-    { name: 'SENSEX', value: '75,237', change: -0.21 },
-    { name: 'BANKNIFTY', value: '53,710', change: -0.77 },
-    { name: 'MIDCAP', value: '14,168', change: -0.68 },
-  ])
+  const [indices, setIndices] = useState([])
+  const [detailSymbol, setDetailSymbol] = useState(null)
 
   const email = currentUser.email
 
@@ -934,6 +1154,12 @@ function Dashboard({ currentUser, onLogout }) {
     fetch(`http://localhost:8000/stocks?email=${email}`)
       .then(res => res.json())
       .then(data => { setStocks(data); setLoading(false) })
+  }
+
+  function loadIndices() {
+    fetch('http://localhost:8000/indices')
+      .then(res => res.json())
+      .then(data => setIndices(data))
   }
 
   function loadPortfolio() {
@@ -955,18 +1181,24 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   useEffect(() => {
+    if (!currentUser) return
     loadStocks()
     loadPortfolio()
     loadAlerts()
+    loadIndices()
     const interval = setInterval(() => checkAlerts(), 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [currentUser])
 
   function handleStockClick(symbol) {
     setSelectedStock(symbol)
     fetch(`http://localhost:8000/history/${symbol}`)
       .then(res => res.json())
       .then(data => setHistory(data))
+  }
+
+  function handleViewDetail(symbol) {
+    setDetailSymbol(symbol)
   }
 
   function handleRemoveStock(symbol) {
@@ -1021,6 +1253,7 @@ function Dashboard({ currentUser, onLogout }) {
           onBuy={handleBuy}
           onSell={handleSell}
           onAddStock={{ email, reload: loadStocks }}
+          onViewDetail={handleViewDetail}
         />
       )
       case 'Watchlist': return (
@@ -1030,8 +1263,55 @@ function Dashboard({ currentUser, onLogout }) {
         <HoldingsTab portfolio={portfolio} stocks={stocks} onBuy={handleBuy} onSell={handleSell} onDeposit={handleDeposit} />
       )
       case 'Orders': return <OrdersTab email={email} />
+      case 'Analytics': return <AnalyticsTab email={email} />
       default: return null
     }
+  }
+
+  if (detailSymbol) {
+    return (
+      <>
+        <StockDetailPage
+          symbol={detailSymbol}
+          email={email}
+          onBack={() => setDetailSymbol(null)}
+          onBuy={handleBuy}
+          onSell={handleSell}
+          onAddToWatchlist={(symbol) => {
+            fetch(`http://localhost:8000/watchlist/add/${symbol}?email=${email}`, { method: 'POST' })
+              .then(res => res.json())
+              .then(data => { alert(data.message); loadStocks() })
+          }}
+        />
+        <button
+          onClick={() => setShowAI(true)}
+          style={{
+            position: 'fixed', bottom: '24px', right: '24px',
+            padding: '14px 20px',
+            backgroundColor: colors.cyan,
+            border: 'none', borderRadius: '50px',
+            color: 'black', fontWeight: 'bold',
+            cursor: 'pointer', fontSize: '14px',
+            zIndex: 50,
+            boxShadow: '0 4px 20px rgba(0,188,212,0.4)',
+          }}
+        >🤖 Ask AI</button>
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          style={{
+            position: 'fixed', bottom: '24px', left: '24px',
+            padding: '12px 16px',
+            backgroundColor: colors.card,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '50px',
+            color: colors.muted, fontWeight: 'bold',
+            cursor: 'pointer', fontSize: '14px',
+            zIndex: 50,
+          }}
+        >↑ Top</button>
+        {showAI && <AIPopup onClose={() => setShowAI(false)} stocks={stocks} />}
+      </>
+    )
   }
 
   return (
@@ -1041,6 +1321,7 @@ function Dashboard({ currentUser, onLogout }) {
         onAlertClick={() => { setShowAlerts(true); loadAlerts() }}
         alertCount={triggeredAlerts.length}
         onProfileClick={() => setShowProfile(true)}
+        onSearch={(symbol) => setDetailSymbol(symbol)}
       />
       <IndicesBar indices={indices} />
       <Tabs activeTab={activeTab} onTabChange={setActiveTab} />
@@ -1065,11 +1346,11 @@ function Dashboard({ currentUser, onLogout }) {
       )}
       {triggeredAlerts.length > 0 && (
         <div style={{
-          position: 'fixed', bottom: '24px', right: '24px',
+          position: 'fixed', bottom: '80px', right: '24px',
           backgroundColor: colors.card,
           border: `1px solid ${colors.red}`,
           borderRadius: '12px', padding: '16px',
-          zIndex: 300, maxWidth: '300px',
+          zIndex: 49, maxWidth: '300px',
         }}>
           <p style={{ margin: '0 0 8px', color: colors.red, fontWeight: 'bold' }}>
             🔔 Price Alert Triggered!
@@ -1090,6 +1371,33 @@ function Dashboard({ currentUser, onLogout }) {
           >Dismiss</button>
         </div>
       )}
+      <button
+        onClick={() => setShowAI(true)}
+        style={{
+          position: 'fixed', bottom: '24px', right: '24px',
+          padding: '14px 20px',
+          backgroundColor: colors.cyan,
+          border: 'none', borderRadius: '50px',
+          color: 'black', fontWeight: 'bold',
+          cursor: 'pointer', fontSize: '14px',
+          zIndex: 50,
+          boxShadow: '0 4px 20px rgba(0,188,212,0.4)',
+        }}
+      >🤖 Ask AI</button>
+
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        style={{
+          position: 'fixed', bottom: '24px', left: '24px',
+          padding: '12px 16px',
+          backgroundColor: colors.card,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '50px',
+          color: colors.muted, fontWeight: 'bold',
+          cursor: 'pointer', fontSize: '14px',
+          zIndex: 150,
+        }}
+      >↑ Top</button>
     </div>
   )
 }
