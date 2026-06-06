@@ -4,6 +4,8 @@ import CandlestickChart from './CandlestickChart'
 import LoginPage from './LoginPage'
 import StockDetailPage from './StockDetailPage'
 
+const API = 'https://ai-trading-dashboard-backend-vh7n.onrender.com'
+
 const colors = {
   bg: '#0a0a0a',
   card: '#141414',
@@ -24,7 +26,7 @@ function Navbar({ onAlertClick, alertCount, onProfileClick, onAIClick, onSearch 
   function handleSearchChange(value) {
     setSearch(value)
     if (value.length < 1) { setSuggestions([]); setShowSuggestions(false); return }
-    fetch(`http://localhost:8000/stocks/search?query=${value}`)
+    fetch(`${API}/stocks/search?query=${value}`)
       .then(res => res.json())
       .then(data => { setSuggestions(data); setShowSuggestions(true) })
   }
@@ -273,7 +275,7 @@ function AIPopup({ onClose, stocks }) {
     if (!selectedSymbol) return
     setLoading(true)
     setSignal(null)
-    fetch(`http://localhost:8000/signal/${selectedSymbol}`)
+    fetch(`${API}/signal/${selectedSymbol}`)
       .then(res => res.json())
       .then(data => { setSignal(data); setLoading(false) })
   }
@@ -364,7 +366,7 @@ function AlertsPopup({ onClose, alerts, stocks, onAlertsChange, email }) {
 
   function handleAddAlert() {
     if (!symbol || !targetPrice) { setMessage('Fill all fields'); return }
-    fetch(`http://localhost:8000/alerts/add?symbol=${symbol}&target_price=${targetPrice}&condition=${condition}&email=${email}`, {
+    fetch(`${API}/alerts/add?symbol=${symbol}&target_price=${targetPrice}&condition=${condition}&email=${email}`, {
       method: 'POST'
     })
       .then(res => res.json())
@@ -372,7 +374,7 @@ function AlertsPopup({ onClose, alerts, stocks, onAlertsChange, email }) {
   }
 
   function handleDeleteAlert(id) {
-    fetch(`http://localhost:8000/alerts/delete/${id}?email=${email}`, { method: 'DELETE' })
+    fetch(`${API}/alerts/delete/${id}?email=${email}`, { method: 'DELETE' })
       .then(res => res.json())
       .then(() => onAlertsChange())
   }
@@ -482,7 +484,7 @@ function ProfilePanel({ onClose, onTabChange, onLogout, email }) {
   const [message, setMessage] = useState('')
 
   useEffect(() => {
-    fetch(`http://localhost:8000/user?email=${email}`)
+    fetch(`${API}/user?email=${email}`)
       .then(res => res.json())
       .then(data => {
         setUser(data)
@@ -492,14 +494,14 @@ function ProfilePanel({ onClose, onTabChange, onLogout, email }) {
   }, [])
 
   function handleUpdate() {
-    fetch(`http://localhost:8000/user/update?email=${email}&name=${name}&phone=${phone}`, {
+    fetch(`${API}/user/update?email=${email}&name=${name}&phone=${phone}`, {
       method: 'PUT'
     })
       .then(res => res.json())
       .then(data => {
         setMessage(data.message)
         setEditing(false)
-        fetch(`http://localhost:8000/user?email=${email}`)
+        fetch(`${API}/user?email=${email}`)
           .then(res => res.json())
           .then(data => setUser(data))
       })
@@ -855,7 +857,7 @@ function OrdersTab({ email }) {
   const [orders, setOrders] = useState([])
 
   useEffect(() => {
-    fetch(`http://localhost:8000/orders?email=${email}`)
+    fetch(`${API}/orders?email=${email}`)
       .then(res => res.json())
       .then(data => setOrders(data))
   }, [])
@@ -918,7 +920,7 @@ function AnalyticsTab({ email }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`http://localhost:8000/analytics?email=${email}`)
+    fetch(`${API}/analytics?email=${email}`)
       .then(res => res.json())
       .then(d => { setData(d); setLoading(false) })
   }, [])
@@ -1151,31 +1153,31 @@ function Dashboard({ currentUser, onLogout }) {
 
   function loadStocks() {
     setLoading(true)
-    fetch(`http://localhost:8000/stocks?email=${email}`)
+    fetch(`${API}/stocks?email=${email}`)
       .then(res => res.json())
       .then(data => { setStocks(data); setLoading(false) })
   }
 
   function loadIndices() {
-    fetch('http://localhost:8000/indices')
+    fetch('${API}/indices')
       .then(res => res.json())
       .then(data => setIndices(data))
   }
 
   function loadPortfolio() {
-    fetch(`http://localhost:8000/portfolio?email=${email}`)
+    fetch(`${API}/portfolio?email=${email}`)
       .then(res => res.json())
       .then(data => setPortfolio(data))
   }
 
   function loadAlerts() {
-    fetch(`http://localhost:8000/alerts?email=${email}`)
+    fetch(`${API}/alerts?email=${email}`)
       .then(res => res.json())
       .then(data => setAlerts(data))
   }
 
   function checkAlerts() {
-    fetch(`http://localhost:8000/alerts/check?email=${email}`)
+    fetch(`${API}/alerts/check?email=${email}`)
       .then(res => res.json())
       .then(data => { if (data.length > 0) setTriggeredAlerts(data) })
   }
@@ -1192,7 +1194,7 @@ function Dashboard({ currentUser, onLogout }) {
 
   function handleStockClick(symbol) {
     setSelectedStock(symbol)
-    fetch(`http://localhost:8000/history/${symbol}`)
+    fetch(`${API}/history/${symbol}`)
       .then(res => res.json())
       .then(data => setHistory(data))
   }
@@ -1202,7 +1204,7 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   function handleRemoveStock(symbol) {
-    fetch(`http://localhost:8000/watchlist/remove/${symbol}?email=${email}`, { method: 'DELETE' })
+    fetch(`${API}/watchlist/remove/${symbol}?email=${email}`, { method: 'DELETE' })
       .then(res => res.json())
       .then(() => {
         if (selectedStock === symbol) { setSelectedStock(null); setHistory([]) }
@@ -1211,7 +1213,7 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   function handleBuy(symbol, qty = 1) {
-    fetch(`http://localhost:8000/trade/buy/${symbol}?email=${email}&quantity=${qty}`, { method: 'POST' })
+    fetch(`${API}/trade/buy/${symbol}?email=${email}&quantity=${qty}`, { method: 'POST' })
       .then(res => res.json())
       .then(data => {
         if (data.error) { alert(data.error); return }
@@ -1221,7 +1223,7 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   function handleSell(symbol, qty = 1) {
-    fetch(`http://localhost:8000/trade/sell/${symbol}?email=${email}&quantity=${qty}`, { method: 'POST' })
+    fetch(`${API}/trade/sell/${symbol}?email=${email}&quantity=${qty}`, { method: 'POST' })
       .then(res => res.json())
       .then(data => {
         if (data.error) { alert(data.error); return }
@@ -1231,7 +1233,7 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   function handleDeposit(amount, setMessage, setDepositAmount) {
-    fetch(`http://localhost:8000/portfolio/deposit/${amount}?email=${email}`, { method: 'POST' })
+    fetch(`${API}/portfolio/deposit/${amount}?email=${email}`, { method: 'POST' })
       .then(res => res.json())
       .then(data => {
         setMessage(data.message)
@@ -1278,7 +1280,7 @@ function Dashboard({ currentUser, onLogout }) {
           onBuy={handleBuy}
           onSell={handleSell}
           onAddToWatchlist={(symbol) => {
-            fetch(`http://localhost:8000/watchlist/add/${symbol}?email=${email}`, { method: 'POST' })
+            fetch(`${API}/watchlist/add/${symbol}?email=${email}`, { method: 'POST' })
               .then(res => res.json())
               .then(data => { alert(data.message); loadStocks() })
           }}

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import CandlestickChart from './CandlestickChart'
 
+const API = 'https://ai-trading-dashboard-backend-vh7n.onrender.com'
+
 const colors = {
   bg: '#0a0a0a',
   card: '#141414',
@@ -32,21 +34,21 @@ function StockDetailPage({ symbol, email, onBack, onBuy, onSell, onAddToWatchlis
 
   useEffect(() => {
     setLoading(true)
-    fetch(`http://localhost:8000/stock/detail/${symbol}`)
+    fetch(`${API}/stock/detail/${symbol}`)
       .then(res => res.json())
       .then(data => { setDetail(data); setLoading(false) })
 
-    fetch(`http://localhost:8000/signal/${symbol}`)
+    fetch(`${API}/signal/${symbol}`)
       .then(res => res.json())
       .then(data => setSignal(data))
 
-    fetch(`http://localhost:8000/news/${symbol}`)
+    fetch(`${API}/news/${symbol}`)
       .then(res => res.json())
       .then(data => setNews(data))
   }, [symbol])
 
   useEffect(() => {
-    fetch(`http://localhost:8000/history/${symbol}?period=${period}`)
+    fetch(`${API}/history/${symbol}?period=${period}`)
       .then(res => res.json())
       .then(data => setHistory(data))
   }, [symbol, period])

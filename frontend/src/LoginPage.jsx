@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+const API = 'https://ai-trading-dashboard-backend-vh7n.onrender.com'
+
 const colors = {
   bg: '#0a0a0a',
   card: '#141414',
@@ -32,7 +34,7 @@ function LoginPage({ onLoginSuccess }) {
     setLoading(true)
 
     if (mode === 'signup') {
-      fetch(`http://localhost:8000/auth/signup?name=${name}&email=${email}&password=${password}`, {
+      fetch(`${API}/auth/signup?name=${name}&email=${email}&password=${password}`, {
         method: 'POST'
       })
         .then(res => res.json())
@@ -43,7 +45,7 @@ function LoginPage({ onLoginSuccess }) {
           onLoginSuccess({ name: data.name, email: data.email })
         })
     } else {
-      fetch(`http://localhost:8000/auth/login?email=${email}&password=${password}`, {
+      fetch(`${API}/auth/login?email=${email}&password=${password}`, {
         method: 'POST'
       })
         .then(res => res.json())
