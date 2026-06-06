@@ -130,6 +130,78 @@ def calculate_ai_signal(symbol):
 def read_root():
     return {"message": "Trading Dashboard API"}
 
+@app.post("/chat")
+def chat_with_ai(message: str, email: str, db: Session = Depends(get_db)):
+    user = get_current_user(email, db)
+    holdings = db.query(Holding).filter(Holding.user_id == user.id).all()
+    orders = db.query(Order).filter(Order.user_id == user.id).all()
+    balance = db.query(Balance).filter(Balance.user_id == user.id).first()
+
+    portfolio_summary = f"User: {user.name}\n"
+    portfolio_summary += f"Available Balance: ₹{balance.amount if balance else 0}\n"
+    portfolio_summary += f"Total Orders: {len(orders)}\n"
+    portfolio_summary += "Holdings:\n"
+
+    for h in holdings:
+        data = fetch_stock_data(h.symbol)
+        current_price = data["price"] if data else h.avg_price
+        pnl = (current_price - h.avg_price) * h.quantity
+        portfolio_summary += f"  - {h.symbol}: {h.quantity} shares, avg price ₹{h.avg_price}, current ₹{current_price}, P&L ₹{round(pnl, 2)}\n"
+
+    system_prompt = f"""You are an expert Indian stock market advisor and portfolio analyst.
+You have access to the user's real portfolio data:
+
+{portfolio_summary}
+
+Rules:
+- Always give specific, actionable advice based on their actual holdings
+- Use Indian financial context (NSE, BSE, SEBI regulations)
+- Keep responses concise and clear (max 150 words)
+- Use ₹ symbol for prices
+- If asked about a stock not in portfolio, give general market advice
+- Be encouraging but realistic about risks
+- Never recommend illegal activities
+"""
+
+    try:
+        import urllib.request
+        import json as json_lib
+
+        payload = json_lib.dumps({
+            "model": "claude-opus-4-6",
+            "max_tokens": 300,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": message}]
+        }).encode()
+
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": "YOUR_ANTHROPIC_API_KEY",
+                "anthropic-version": "2023-06-01"
+            },
+            method="POST"
+        )
+
+        with urllib.request.urlopen(req) as response:
+            result = json_lib.loads(response.read())
+            return {"reply": result["content"][0]["text"]}
+
+    except Exception as e:
+        holdings_text = ", ".join([h.symbol for h in holdings]) if holdings else "none"
+        balance_amt = balance.amount if balance else 0
+
+        if "sell" in message.lower() or "बेचूं" in message.lower():
+            return {"reply": f"Based on your portfolio ({holdings_text}), consider selling if you've hit your target profit or if the stock has dropped more than 8% from your buy price. Your current balance is ₹{balance_amt:.0f}."}
+        elif "buy" in message.lower():
+            return {"reply": f"You have ₹{balance_amt:.0f} available. Focus on fundamentally strong stocks. Diversify across sectors — IT, Banking, FMCG. Never invest more than 20% in one stock."}
+        elif "portfolio" in message.lower():
+            return {"reply": f"Your portfolio has {len(holdings)} stocks: {holdings_text}. Balance: ₹{balance_amt:.0f}. Review your P&L in the Analytics tab for detailed performance."}
+        else:
+            return {"reply": f"I'm your AI trading assistant! Ask me about your portfolio ({holdings_text}), whether to buy or sell, market analysis, or investment strategies. How can I help?"}
+
 @app.get("/indices")
 def get_indices():
     try:
