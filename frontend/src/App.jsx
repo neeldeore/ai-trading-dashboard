@@ -3,6 +3,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 import CandlestickChart from './CandlestickChart'
 import LoginPage from './LoginPage'
 import StockDetailPage from './StockDetailPage'
+import AIChatPanel from './AIChatPanel'
 
 const API = 'https://ai-trading-dashboard-backend-vh7n.onrender.com'
 
@@ -58,7 +59,7 @@ function Navbar({ onAlertClick, alertCount, onProfileClick, onAIClick, onSearch 
         </span>
       </div>
 
-      <div style={{ position: 'relative', flex: 1, maxWidth: '400px', margin: '0 24px' }}>
+      <div style={{ position: 'relative', flex: 1, maxWidth: '400px', margin: '0 8px' }}>
         <input
           type="text"
           value={search}
@@ -135,17 +136,27 @@ function IndicesBar({ indices }) {
   return (
     <div style={{
       backgroundColor: '#0d0d0d',
-      borderBottom: `1px solid ${colors.border}`,
-      padding: '8px 24px',
+      borderBottom: `1px solid #222`,
+      padding: '8px 16px',
       display: 'flex',
-      gap: '32px',
+      gap: '16px',
       overflowX: 'auto',
+      WebkitOverflowScrolling: 'touch',
     }}>
       {indices.map((index) => (
-        <div key={index.name} style={{ display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap' }}>
-          <span style={{ color: colors.muted, fontSize: '13px' }}>{index.name}</span>
-          <span style={{ color: colors.text, fontSize: '13px', fontWeight: 'bold' }}>{index.value}</span>
-          <span style={{ color: index.change >= 0 ? colors.green : colors.red, fontSize: '12px' }}>
+        <div key={index.name} style={{
+          display: 'flex', gap: '6px',
+          alignItems: 'center', whiteSpace: 'nowrap',
+          minWidth: 'fit-content',
+        }}>
+          <span style={{ color: '#888', fontSize: '12px' }}>{index.name}</span>
+          <span style={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}>
+            {index.value}
+          </span>
+          <span style={{
+            color: index.change >= 0 ? '#4caf50' : '#f44336',
+            fontSize: '11px',
+          }}>
             {index.change >= 0 ? '▲' : '▼'} {Math.abs(index.change)}%
           </span>
         </div>
@@ -159,23 +170,27 @@ function Tabs({ activeTab, onTabChange }) {
   return (
     <div style={{
       backgroundColor: '#0d0d0d',
-      borderBottom: `1px solid ${colors.border}`,
-      padding: '0 24px',
+      borderBottom: `1px solid #222`,
+      padding: '0 8px',
       display: 'flex',
+      overflowX: 'auto',
+      WebkitOverflowScrolling: 'touch',
     }}>
       {tabs.map(tab => (
         <button
           key={tab}
           onClick={() => onTabChange(tab)}
           style={{
-            padding: '14px 24px',
+            padding: '12px 14px',
             backgroundColor: 'transparent',
             border: 'none',
-            borderBottom: activeTab === tab ? `2px solid ${colors.cyan}` : '2px solid transparent',
-            color: activeTab === tab ? colors.cyan : colors.muted,
+            borderBottom: activeTab === tab ? `2px solid #00bcd4` : '2px solid transparent',
+            color: activeTab === tab ? '#00bcd4' : '#888',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '13px',
             fontWeight: activeTab === tab ? 'bold' : 'normal',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >{tab}</button>
       ))}
@@ -196,7 +211,9 @@ function StockCard({ symbol, data, onClick, isSelected, onRemove, onBuy, onSell 
         margin: '8px',
         backgroundColor: colors.card,
         color: colors.text,
-        width: '200px',
+        width: 'calc(50% - 16px)',
+        minWidth: '150px',
+        maxWidth: '200px',
         cursor: 'pointer',
         position: 'relative',
       }}
@@ -1142,6 +1159,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [portfolio, setPortfolio] = useState({ balance: 0, holdings: {} })
   const [activeTab, setActiveTab] = useState('Explore')
   const [showAI, setShowAI] = useState(false)
+  const [showChat, setShowChat] = useState(false)
   const [showAlerts, setShowAlerts] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [alerts, setAlerts] = useState([])
@@ -1285,19 +1303,36 @@ function Dashboard({ currentUser, onLogout }) {
               .then(data => { alert(data.message); loadStocks() })
           }}
         />
+        <div style={{
+        position: 'fixed', bottom: '24px', right: '24px',
+        display: 'flex', flexDirection: 'column', gap: '8px',
+        zIndex: 50,
+      }}>
         <button
-          onClick={() => setShowAI(true)}
+          onClick={() => { setShowChat(true); setShowAI(false) }}
           style={{
-            position: 'fixed', bottom: '24px', right: '24px',
-            padding: '14px 20px',
+            padding: '12px 20px',
             backgroundColor: colors.cyan,
             border: 'none', borderRadius: '50px',
             color: 'black', fontWeight: 'bold',
             cursor: 'pointer', fontSize: '14px',
-            zIndex: 50,
             boxShadow: '0 4px 20px rgba(0,188,212,0.4)',
           }}
-        >🤖 Ask AI</button>
+        >💬 Chat AI</button>
+        <button
+          onClick={() => { setShowAI(true); setShowChat(false) }}
+          style={{
+            padding: '12px 20px',
+            backgroundColor: '#1a1a1a',
+            border: `1px solid ${colors.cyan}`,
+            borderRadius: '50px',
+            color: colors.cyan, fontWeight: 'bold',
+            cursor: 'pointer', fontSize: '14px',
+          }}
+        >🤖 Signals</button>
+      </div>
+      {showAI && <AIPopup onClose={() => setShowAI(false)} stocks={stocks} />}
+      {showChat && <AIChatPanel onClose={() => setShowChat(false)} email={email} />}
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           style={{
@@ -1329,6 +1364,12 @@ function Dashboard({ currentUser, onLogout }) {
       <Tabs activeTab={activeTab} onTabChange={setActiveTab} />
       {renderTab()}
       {showAI && <AIPopup onClose={() => setShowAI(false)} stocks={stocks} />}
+        {showChat && (
+        <AIChatPanel
+          onClose={() => setShowChat(false)}
+          email={email}
+        />
+      )}
       {showAlerts && (
         <AlertsPopup
           onClose={() => setShowAlerts(false)}
